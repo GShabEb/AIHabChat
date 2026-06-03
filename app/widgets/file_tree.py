@@ -98,15 +98,20 @@ class FileTreeWidget(QTreeWidget):
     def _populate(self, data: list[dict], parent: QTreeWidgetItem) -> None:
         for entry in data:
             if entry["type"] == "folder":
+                folder_path = entry.get("path", "")
                 item = QTreeWidgetItem(parent, [f"\U0001f4c1 {entry['name']}"])
-                item.setData(0, Qt.UserRole, entry.get("path", ""))
+                item.setData(0, Qt.UserRole, folder_path)
                 item.setExpanded(True)
+                # Папки принимают drop
+                item.setFlags(item.flags() | Qt.ItemIsDropEnabled)
                 self._populate(entry["children"], item)
             else:
                 name = entry["name"]
-                icon = "\U0001f4dd" if name.endswith(".md") else "\U0001f4ca"  # 📝 or 📊
+                icon = "\U0001f4dd" if name.endswith(".md") else "\U0001f4ca"
                 item = QTreeWidgetItem(parent, [f"{icon} {name}"])
                 item.setData(0, Qt.UserRole, entry["path"])
+                # Файлы можно перетаскивать
+                item.setFlags(item.flags() & ~Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
 
     # ── Drag ──────────────────────────────────────────────────
 
@@ -117,13 +122,13 @@ class FileTreeWidget(QTreeWidget):
             return
 
         rel_path = item.data(0, Qt.UserRole)
-        if not rel_path and not self.is_folder_item(item):
+        if not rel_path:
             return
 
         self._drag_item = item
 
         mime_data = QMimeData()
-        mime_data.setData(self.MIME_TYPE, rel_path.encode("utf-8") if rel_path else b"")
+        mime_data.setData(self.MIME_TYPE, rel_path.encode("utf-8"))
 
         drag = QDrag(self)
         drag.setMimeData(mime_data)
@@ -134,29 +139,28 @@ class FileTreeWidget(QTreeWidget):
     def dropEvent(self, event) -> None:
         """Обработка перетаскивания файла/папки."""
         if not self._file_manager:
-            event.ignore()
+            super().dropEvent(event)
             return
 
-        target_item = self.itemAt(event.pos())
         mime_data = event.mimeData()
 
         if not mime_data.hasFormat(self.MIME_TYPE):
-            event.ignore()
+            super().dropEvent(event)
             return
 
         src_path = bytes(mime_data.data(self.MIME_TYPE)).decode("utf-8")
         if not src_path:
-            event.ignore()
+            super().dropEvent(event)
             return
 
         # Определяем целевую папку
+        target_item = self.itemAt(event.pos())
         if target_item and self.is_folder_item(target_item):
             target_folder = target_item.data(0, Qt.UserRole) or ""
         else:
-            # Бросили не на папку — в корень
             target_folder = ""
 
-        # Нельзя перетащить папку в саму себя
+        # Нельзя перетащить в саму себя
         if src_path == target_folder or (target_folder and target_folder.startswith(src_path + "/")):
             event.ignore()
             return
@@ -174,7 +178,7 @@ class FileTreeWidget(QTreeWidget):
             self.file_moved.emit(src_path, new_path)
             self.refresh()
             event.accept()
-        except OSError:
+        except OSError as e:
             event.ignore()
 
     def dragEnterEvent(self, event) -> None:

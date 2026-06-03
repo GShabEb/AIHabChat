@@ -1,5 +1,6 @@
 """Работа с файловой системой внутри vault: чтение, запись, список файлов."""
 
+import shutil
 from pathlib import Path
 from typing import Generator
 
@@ -46,12 +47,12 @@ class FileManager:
         return full
 
     def delete(self, relative_path: str) -> None:
-        """Удалить файл или пустую папку."""
+        """Удалить файл или папку (включая непустую)."""
         full = self._resolve(relative_path)
         if full.is_file():
             full.unlink()
         elif full.is_dir():
-            full.rmdir()  # удалит только пустую
+            shutil.rmtree(full)
 
     def rename(self, old_rel: str, new_rel: str) -> None:
         """Переименовать / переместить файл или папку."""
@@ -108,6 +109,7 @@ class FileManager:
                 items.append({
                     "name": entry.name,
                     "type": "folder",
+                    "path": str(rel).replace("\\", "/"),
                     "children": children,
                 })
             elif entry.suffix.lower() in self.SUPPORTED_EXTENSIONS:

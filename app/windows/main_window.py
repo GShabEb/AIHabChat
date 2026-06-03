@@ -60,35 +60,50 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 """
 
 THEME_DARK = """
-QMainWindow { background: #1e1e1e; color: #fff; }
-#sidebar { background: #252526; border-right: 1px solid #444; }
+QMainWindow { background: #000000; color: #ffffff; }
+#sidebar { background: #000000; border-right: 1px solid #333; }
 #sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
-                 background-color: #333; border-bottom: 1px solid #444; color: #fff; }
-#topBar { background-color: #2d2d2d; border-bottom: 1px solid #444; }
+                 background-color: #111111; border-bottom: 1px solid #333; color: #ffffff; }
+#topBar { background-color: #111111; border-bottom: 1px solid #333; }
 #noteTitle { color: #ffffff; font-size: 22px; font-weight: bold; border: none;
              background: transparent; padding: 10px 16px 4px 16px; }
-QMenuBar { background: #2d2d2d; color: #fff; }
-QMenuBar::item { color: #fff; }
-QMenuBar::item:selected { background: #3a3a3a; }
-QMenu { background: #2d2d2d; color: #fff; }
-QMenu::item:selected { background: #4a9eff; }
-QToolBar { background: #2d2d2d; border-bottom: 1px solid #444; spacing: 4px; padding: 2px; }
-QToolBar QToolButton { color: #fff; }
-QStatusBar { background: #2d2d2d; color: #aaa; }
-QTreeWidget { background: #252526; border: none; color: #ffffff; }
-QTreeWidget::item { color: #ffffff; }
+QMenuBar { background: #000000; color: #ffffff; }
+QMenuBar::item { color: #ffffff; }
+QMenuBar::item:selected { background: #222222; }
+QMenu { background: #000000; color: #ffffff; border: 1px solid #333; }
+QMenu::item { color: #ffffff; }
+QMenu::item:selected { background: #4a9eff; color: white; }
+QToolBar { background: #000000; border-bottom: 1px solid #333; spacing: 4px; padding: 2px; }
+QToolBar QToolButton { color: #ffffff; }
+QStatusBar { background: #000000; color: #aaaaaa; }
+QTreeWidget { background: #000000; border: none; color: #ffffff; }
+QTreeWidget::item { color: #ffffff; padding: 2px; }
 QTreeWidget::item:selected { background: #4a9eff; color: white; }
-QTreeWidget::item:hover { background: #3a3a3a; }
-QPlainTextEdit { background-color: #1e1e1e; color: #ffffff; border: none;
+QTreeWidget::item:hover { background: #222222; }
+QPlainTextEdit { background-color: #000000; color: #ffffff; border: none;
                  padding: 8px; padding-left: 4px; }
-QTextBrowser { background-color: #1e1e1e; color: #ffffff; border: none; padding: 8px; }
+QTextBrowser { background-color: #000000; color: #ffffff; border: none; padding: 8px; }
 QLabel { color: #ffffff; }
-QPushButton { color: #fff; }
-QLineEdit { color: #ffffff; }
-QSplitter::handle { background: #444; }
-QScrollBar:vertical { background: #2d2d2d; width: 10px; }
-QScrollBar::handle:vertical { background: #555; border-radius: 4px; }
+QPushButton { color: #ffffff; }
+QLineEdit { color: #ffffff; background: #000000; }
+QSplitter::handle { background: #333; }
+QScrollBar:vertical { background: #111111; width: 10px; }
+QScrollBar::handle:vertical { background: #333; border-radius: 4px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: #111111; height: 10px; }
+QScrollBar::handle:horizontal { background: #333; border-radius: 4px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QInputDialog { background: #000000; color: #ffffff; }
+QMessageBox { background: #000000; color: #ffffff; }
+QGroupBox { color: #ffffff; border: 1px solid #333; }
+QTabWidget::pane { border: 1px solid #333; background: #000000; }
+QTabBar::tab { background: #111111; color: #ffffff; padding: 6px 12px; border: 1px solid #333; }
+QTabBar::tab:selected { background: #222222; }
+QComboBox { background: #111111; color: #ffffff; border: 1px solid #333; padding: 4px; }
+QComboBox QAbstractItemView { background: #000000; color: #ffffff; selection-background-color: #4a9eff; }
+QSpinBox { background: #111111; color: #ffffff; border: 1px solid #333; padding: 4px; }
+QCheckBox { color: #ffffff; }
+QCheckBox::indicator { width: 14px; height: 14px; }
 """
 
 
