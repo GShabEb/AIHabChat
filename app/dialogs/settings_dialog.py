@@ -14,10 +14,13 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QTextBrowser,
     QFormLayout,
+    QLineEdit,
+    QMessageBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 
 from app.config import Config
+from llm.client import LLMClientError, fetch_models
 
 
 # ── шпаргалка Markdown ────────────────────────────────────────
@@ -84,6 +87,25 @@ MD_CHEATSHEET = """
 """
 
 
+class _ModelsFetchWorker(QThread):
+    ok = Signal(list)
+    err = Signal(str)
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        super().__init__()
+        self._base = base_url
+        self._key = api_key
+
+    def run(self) -> None:
+        try:
+            models = fetch_models(self._base, self._key)
+            self.ok.emit(models)
+        except LLMClientError as e:
+            self.err.emit(str(e))
+        except Exception as e:
+            self.err.emit(str(e))
+
+
 class SettingsDialog(QDialog):
     """Диалог настроек: оформление, редактор, шпаргалка MD."""
 
@@ -105,7 +127,9 @@ class SettingsDialog(QDialog):
         tabs = QTabWidget()
         tabs.addTab(self._create_general_tab(), "Оформление")
         tabs.addTab(self._create_editor_tab(), "Редактор")
+        tabs.addTab(self._create_llm_tab(), "LLM")
         tabs.addTab(self._create_cheatsheet_tab(), "Шпаргалка MD")
+        self._models_worker: _ModelsFetchWorker | None = None
         layout.addWidget(tabs)
 
         # Кнопки
@@ -171,6 +195,94 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         return widget
 
+    # ── вкладка: LLM ─────────────────────────────────────────
+
+    def _create_llm_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox("Провайдер LLM (OpenAI-совместимый API)")
+        form = QFormLayout(group)
+
+        self._llm_url = QLineEdit()
+        self._llm_url.setPlaceholderText("https://api.claudehub.fun")
+        form.addRow("URL агрегатора:", self._llm_url)
+
+        self._llm_key = QLineEdit()
+        self._llm_key.setEchoMode(QLineEdit.Password)
+        self._llm_key.setPlaceholderText("API-ключ")
+        form.addRow("API-ключ:", self._llm_key)
+
+        model_row = QHBoxLayout()
+        self._llm_model = QComboBox()
+        self._llm_model.setEditable(False)
+        self._llm_model.setMinimumWidth(220)
+        model_row.addWidget(self._llm_model, stretch=1)
+
+        self._fetch_models_btn = QPushButton("Загрузить модели")
+        self._fetch_models_btn.clicked.connect(self._on_fetch_models)
+        model_row.addWidget(self._fetch_models_btn)
+        form.addRow("Модель:", model_row)
+
+        layout.addWidget(group)
+
+        hint = QLabel(
+            "Сначала укажите URL и API-ключ, нажмите «Загрузить модели», "
+            "затем выберите модель из списка. "
+            "ClaudeHub API: https://api.claudehub.fun "
+            "(клиент добавит /v1 автоматически). "
+            "Не используйте app.claudehub.fun — это только сайт."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        self._llm_status = QLabel("")
+        self._llm_status.setWordWrap(True)
+        self._llm_status.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self._llm_status)
+
+        layout.addStretch()
+        return widget
+
+    def _fill_model_combo(self, models: list[str], selected: str = "") -> None:
+        self._llm_model.clear()
+        self._llm_model.addItems(models)
+        if selected:
+            idx = self._llm_model.findText(selected)
+            if idx >= 0:
+                self._llm_model.setCurrentIndex(idx)
+            else:
+                self._llm_model.insertItem(0, selected)
+                self._llm_model.setCurrentIndex(0)
+
+    def _on_fetch_models(self) -> None:
+        base = self._llm_url.text().strip()
+        key = self._llm_key.text().strip()
+        if not base or not key:
+            QMessageBox.warning(
+                self, "LLM", "Укажите URL агрегатора и API-ключ."
+            )
+            return
+        self._fetch_models_btn.setEnabled(False)
+        self._llm_status.setText("Загрузка списка моделей…")
+        self._models_worker = _ModelsFetchWorker(base, key)
+        self._models_worker.ok.connect(self._on_models_loaded)
+        self._models_worker.err.connect(self._on_models_error)
+        self._models_worker.finished.connect(
+            lambda: self._fetch_models_btn.setEnabled(True)
+        )
+        self._models_worker.start()
+
+    def _on_models_loaded(self, models: list[str]) -> None:
+        Config.set("llm_models", models)
+        sel = self._llm_model.currentText() or Config.get("llm_model", "")
+        self._fill_model_combo(models, sel)
+        self._llm_status.setText(f"Загружено моделей: {len(models)}")
+
+    def _on_models_error(self, err: str) -> None:
+        self._llm_status.setText(f"Ошибка: {err}")
+
     # ── вкладка: Шпаргалка MD ────────────────────────────────
 
     def _create_cheatsheet_tab(self) -> QWidget:
@@ -194,10 +306,24 @@ class SettingsDialog(QDialog):
         self._line_numbers_check.setChecked(Config.get("show_line_numbers", True))
         self._live_preview_check.setChecked(Config.get("live_preview", True))
 
+        url = Config.get("llm_base_url", "https://api.claudehub.fun")
+        if "://app.claudehub.fun" in url:
+            url = url.replace("://app.claudehub.fun", "://api.claudehub.fun")
+        self._llm_url.setText(url)
+        self._llm_key.setText(Config.get("llm_api_key", ""))
+        cached = Config.get("llm_models", []) or []
+        if cached:
+            self._fill_model_combo(cached, Config.get("llm_model", ""))
+        elif Config.get("llm_model"):
+            self._fill_model_combo([Config.get("llm_model")], Config.get("llm_model"))
+
     def _on_save(self) -> None:
         """Сохранить настройки."""
         Config.set("theme", "light" if self._theme_combo.currentIndex() == 0 else "dark")
         Config.set("tab_size", self._tab_spin.value())
         Config.set("show_line_numbers", self._line_numbers_check.isChecked())
         Config.set("live_preview", self._live_preview_check.isChecked())
+        Config.set("llm_base_url", self._llm_url.text().strip())
+        Config.set("llm_api_key", self._llm_key.text().strip())
+        Config.set("llm_model", self._llm_model.currentText().strip())
         self.accept()

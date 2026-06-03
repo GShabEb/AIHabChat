@@ -15,6 +15,43 @@ from PySide6.QtGui import (
 )
 
 from app.config import Config
+from core.mermaid_util import is_mermaid_note
+
+
+# ── Подсветка синтаксиса Mermaid ───────────────────────────────
+
+class MermaidHighlighter(QSyntaxHighlighter):
+    """Подсветка диаграмм Mermaid (ключевые слова, стрелки, узлы)."""
+
+    def __init__(self, document: QTextDocument) -> None:
+        super().__init__(document)
+        import re
+
+        keyword = QTextCharFormat()
+        keyword.setForeground(QColor("#569cd6"))
+        keyword.setFontWeight(QFont.Bold)
+
+        string_fmt = QTextCharFormat()
+        string_fmt.setForeground(QColor("#ce9178"))
+
+        comment = QTextCharFormat()
+        comment.setForeground(QColor("#6a9955"))
+
+        arrow = QTextCharFormat()
+        arrow.setForeground(QColor("#d4d4d4"))
+
+        self._rules: list[tuple] = [
+            (re.compile(r"\b(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|C4Context)\b"), keyword),
+            (re.compile(r"\b(subgraph|end|style|linkStyle|click|direction|TB|BT|RL|LR)\b"), keyword),
+            (re.compile(r"(-->|---|-\.->|==>|--o|--x)"), arrow),
+            (re.compile(r"\[[^\]]+\]|\([^)]+\)|\{[^}]+\}"), string_fmt),
+            (re.compile(r"%%.*$"), comment),
+        ]
+
+    def highlightBlock(self, text: str) -> None:
+        for pattern, fmt in self._rules:
+            for match in pattern.finditer(text):
+                self.setFormat(match.start(), match.end() - match.start(), fmt)
 
 
 # ── Подсветка синтаксиса Markdown ────────────────────────────
@@ -116,12 +153,18 @@ class EditorWidget(QPlainTextEdit):
         self._current_path: str = ""
         self._show_line_numbers: bool = Config.get("show_line_numbers", True)
         self._tab_size: int = Config.get("tab_size", 4)
+        self._dark_theme: bool = Config.get("theme", "light") == "dark"
+        self._line_bg = QColor("#000000" if self._dark_theme else "#ffffff")
+        self._line_fg = QColor("#666666" if self._dark_theme else "#999999")
 
         # Панель номеров строк
         self._line_number_area = LineNumberArea(self)
 
         # Подсветка синтаксиса
-        self._highlighter = MarkdownHighlighter(self.document())
+        self._md_highlighter = MarkdownHighlighter(self.document())
+        self._mermaid_highlighter = MermaidHighlighter(self.document())
+        self._highlighter = self._md_highlighter
+        self._mermaid_mode = False
 
         self._setup_ui()
         self._update_line_number_area_width()
@@ -145,6 +188,7 @@ class EditorWidget(QPlainTextEdit):
     def load_content(self, path: str, text: str) -> None:
         """Загрузить текст заметки в редактор."""
         self._current_path = path
+        self.set_mermaid_mode(is_mermaid_note(path))
         self.setPlainText(text)
         self.document().setModified(False)
 
@@ -154,10 +198,30 @@ class EditorWidget(QPlainTextEdit):
         self.clear()
         self.document().setModified(False)
 
+    def set_theme(self, dark: bool) -> None:
+        """Цвета области номеров строк под светлую/тёмную тему."""
+        self._dark_theme = dark
+        self._line_bg = QColor("#000000" if dark else "#ffffff")
+        self._line_fg = QColor("#666666" if dark else "#999999")
+        self._line_number_area.update()
+
+    def set_mermaid_mode(self, enabled: bool) -> None:
+        """Переключить подсветку Mermaid / Markdown."""
+        if self._mermaid_mode == enabled:
+            return
+        self._mermaid_mode = enabled
+        self._highlighter.setDocument(None)
+        self._highlighter = (
+            self._mermaid_highlighter if enabled else self._md_highlighter
+        )
+        self._highlighter.setDocument(self.document())
+        self._highlighter.rehighlight()
+
     def apply_settings(self) -> None:
         """Применить настройки из Config."""
         self._tab_size = Config.get("tab_size", 4)
         self._show_line_numbers = Config.get("show_line_numbers", True)
+        self.set_theme(Config.get("theme", "light") == "dark")
         self.setTabStopDistance(self._tab_size * self.fontMetrics().averageCharWidth())
         self._update_line_number_area_width()
         self._line_number_area.update()
@@ -212,7 +276,7 @@ class EditorWidget(QPlainTextEdit):
             return
 
         painter = QPainter(self._line_number_area)
-        painter.fillRect(event.rect(), QColor("#f0f0f0"))
+        painter.fillRect(event.rect(), self._line_bg)
 
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
@@ -222,7 +286,7 @@ class EditorWidget(QPlainTextEdit):
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
-                painter.setPen(QColor("#999"))
+                painter.setPen(self._line_fg)
                 painter.setFont(self.font())
                 painter.drawText(
                     0, int(top), self._line_number_area.width() - 4,

@@ -1,20 +1,10 @@
-"""
-Инструменты (tools) для работы LLM.
+from llm.tools.definitions import SYSTEM_PROMPT, TOOL_DEFINITIONS
+from llm.tools.executor import FileProposal, apply_proposal, handle_tool_call
 
-Каждый инструмент — это класс с методом `execute`, который LLM может вызывать
-для взаимодействия с хранилищем заметок, файловой системой и т.д.
-
-TODO: реализовать инструменты:
-- NoteSearchTool — поиск по заметкам
-- NoteReadTool — чтение заметки
-- NoteWriteTool — создание/редактирование заметки
-- FileTreeTool — получение дерева файлов
-"""
-
-# Заглушки — будут реализованы позже
-AVAILABLE_TOOLS: list[str] = [
-    "note_search",
-    "note_read",
-    "note_write",
-    "file_tree",
+__all__ = [
+    "SYSTEM_PROMPT",
+    "TOOL_DEFINITIONS",
+    "FileProposal",
+    "apply_proposal",
+    "handle_tool_call",
 ]

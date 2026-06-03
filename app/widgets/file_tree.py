@@ -219,7 +219,7 @@ class FileTreeWidget(QTreeWidget):
             parent_path = item.data(0, Qt.UserRole) or ""
 
         new_note = menu.addAction("Новая заметка (.md)")
-        new_mermaid = menu.addAction("Новая схема (.mermaid.md)")
+        new_mermaid = menu.addAction("Новая схема (.mermaid)")
         new_folder = menu.addAction("Новая папка")
         menu.addSeparator()
 

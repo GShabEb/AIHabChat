@@ -1,6 +1,6 @@
 """Кнопка чата с выпадающим меню режимов."""
 
-from PySide6.QtWidgets import QPushButton, QMenu, QMessageBox
+from PySide6.QtWidgets import QPushButton, QMenu
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QAction
 
@@ -11,7 +11,7 @@ class ChatButton(QPushButton):
     - Классический чат (боковая панель)
     - Полноценный чат (отдельное окно)
 
-    При нажатии показывает сообщение «в разработке».
+    Клик — классический чат; в меню — полноценный (позже).
     """
 
     classic_chat_requested = Signal()
@@ -25,7 +25,7 @@ class ChatButton(QPushButton):
 
     def _setup_ui(self) -> None:
         self.setText("💬 Чат")
-        self.setFixedSize(100, 36)
+        self.setFixedSize(72, 22)
         self.setStyleSheet(
             "QPushButton {"
             "  background-color: #4a9eff;"
@@ -33,8 +33,8 @@ class ChatButton(QPushButton):
             "  border: none;"
             "  border-radius: 6px;"
             "  font-weight: bold;"
-            "  font-size: 13px;"
-            "  padding: 4px 12px;"
+            "  font-size: 11px;"
+            "  padding: 0 8px;"
             "}"
             "QPushButton:hover {"
             "  background-color: #3a8eef;"
@@ -64,16 +64,12 @@ class ChatButton(QPushButton):
 
     def _on_classic(self) -> None:
         self.classic_chat_requested.emit()
-        self._show_development_message("Классический чат")
 
     def _on_full(self) -> None:
         self.full_chat_requested.emit()
-        self._show_development_message("Полноценный чат")
-
-    def _show_development_message(self, mode: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
         QMessageBox.information(
             self,
             "В разработке",
-            f"Режим «{mode}» находится в разработке.\n\n"
-            "Скоро здесь появится LLM-хаб!",
+            "Полноценный чат (отдельное окно) появится в следующей версии.",
         )

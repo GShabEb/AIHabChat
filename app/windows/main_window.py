@@ -6,98 +6,54 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QSplitter,
-    QToolBar,
     QLabel,
     QLineEdit,
     QMessageBox,
     QInputDialog,
     QStatusBar,
     QPushButton,
+    QSizePolicy,
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 
 from app.config import Config
+from app.themes import THEME_DARK, THEME_LIGHT
 from app.widgets.file_tree import FileTreeWidget
+from core.mermaid_util import default_mermaid_template, is_mermaid_note
 from app.widgets.editor import EditorWidget
 from app.widgets.preview import PreviewWidget
 from app.widgets.chat_button import ChatButton
+from app.widgets.chat_panel import ChatPanel
 from app.dialogs.vault_dialog import VaultDialog
 from app.dialogs.settings_dialog import SettingsDialog
 
 
-# ── Таблицы стилей ────────────────────────────────────────────
+def _title_from_path(rel_path: str) -> str:
+    """Имя заметки без расширения."""
+    filename = rel_path.split("/")[-1]
+    lower = filename.lower()
+    if lower.endswith(".mermaid.md"):
+        return filename[:-11]
+    if lower.endswith(".mermaid"):
+        return filename[:-8]
+    if lower.endswith(".mmd"):
+        return filename[:-4]
+    if lower.endswith(".md"):
+        return filename[:-3]
+    if "." in filename:
+        return filename.rsplit(".", 1)[0]
+    return filename
 
-THEME_LIGHT = """
-QMainWindow { background: #ffffff; }
-#sidebar { background: #f5f5f5; border-right: 1px solid #ddd; }
-#sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
-                 background-color: #e8e8e8; border-bottom: 1px solid #ccc; color: #000; }
-#topBar { background-color: #f0f0f0; border-bottom: 1px solid #ccc; }
-QMenuBar { background: #f5f5f5; color: #000; }
-QMenuBar::item { color: #000; }
-QMenu { background: #f8f8f8; color: #000; }
-QMenu::item:selected { background: #4a9eff; color: white; }
-QToolBar { background: #f8f8f8; border-bottom: 1px solid #ddd; spacing: 4px; padding: 2px; }
-QToolBar QToolButton { color: #000; }
-QStatusBar { background: #f0f0f0; color: #555; }
-QTreeWidget { background: #fafafa; border: none; color: #000; }
-QTreeWidget::item { color: #000; }
-QTreeWidget::item:selected { background: #4a9eff; color: white; }
-QPlainTextEdit { background-color: #ffffff; border: none; color: #000; padding: 8px; }
-QTextBrowser { background-color: #ffffff; border: none; color: #000; padding: 8px; }
-QLabel { color: #000; }
-QPushButton { color: #000; }
-QLineEdit { color: #000; }
-QSplitter::handle { background: #ddd; }
-QScrollBar:vertical { background: #f0f0f0; width: 10px; }
-QScrollBar::handle:vertical { background: #ccc; border-radius: 4px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-"""
 
-THEME_DARK = """
-QMainWindow { background: #000000; color: #ffffff; }
-#sidebar { background: #000000; border-right: 1px solid #333; }
-#sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
-                 background-color: #111111; border-bottom: 1px solid #333; color: #ffffff; }
-#topBar { background-color: #111111; border-bottom: 1px solid #333; }
-QMenuBar { background: #000000; color: #ffffff; }
-QMenuBar::item { color: #ffffff; }
-QMenuBar::item:selected { background: #222222; }
-QMenu { background: #000000; color: #ffffff; border: 1px solid #333; }
-QMenu::item { color: #ffffff; }
-QMenu::item:selected { background: #4a9eff; color: white; }
-QToolBar { background: #000000; border-bottom: 1px solid #333; spacing: 4px; padding: 2px; }
-QToolBar QToolButton { color: #ffffff; }
-QStatusBar { background: #000000; color: #aaaaaa; }
-QTreeWidget { background: #000000; border: none; color: #ffffff; }
-QTreeWidget::item { color: #ffffff; padding: 2px; }
-QTreeWidget::item:selected { background: #4a9eff; color: white; }
-QTreeWidget::item:hover { background: #222222; }
-QPlainTextEdit { background-color: #000000; color: #ffffff; border: none; padding: 8px; }
-QTextBrowser { background-color: #000000; color: #ffffff; border: none; padding: 8px; }
-QLabel { color: #ffffff; }
-QPushButton { color: #ffffff; }
-QLineEdit { color: #ffffff; background: #000000; }
-QSplitter::handle { background: #333; }
-QScrollBar:vertical { background: #111111; width: 10px; }
-QScrollBar::handle:vertical { background: #333; border-radius: 4px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar:horizontal { background: #111111; height: 10px; }
-QScrollBar::handle:horizontal { background: #333; border-radius: 4px; }
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
-QInputDialog { background: #000000; color: #ffffff; }
-QMessageBox { background: #000000; color: #ffffff; }
-QGroupBox { color: #ffffff; border: 1px solid #333; }
-QTabWidget::pane { border: 1px solid #333; background: #000000; }
-QTabBar::tab { background: #111111; color: #ffffff; padding: 6px 12px; border: 1px solid #333; }
-QTabBar::tab:selected { background: #222222; }
-QComboBox { background: #111111; color: #ffffff; border: 1px solid #333; padding: 4px; }
-QComboBox QAbstractItemView { background: #000000; color: #ffffff; selection-background-color: #4a9eff; }
-QSpinBox { background: #111111; color: #ffffff; border: 1px solid #333; padding: 4px; }
-QCheckBox { color: #ffffff; }
-QCheckBox::indicator { width: 14px; height: 14px; }
-"""
+def _extension_for_path(rel_path: str) -> str:
+    if rel_path.lower().endswith(".mermaid.md"):
+        return ".mermaid.md"
+    if rel_path.lower().endswith(".mermaid"):
+        return ".mermaid"
+    if rel_path.lower().endswith(".mmd"):
+        return ".mmd"
+    return ".md"
 
 
 class MainWindow(QMainWindow):
@@ -112,7 +68,6 @@ class MainWindow(QMainWindow):
 
         self._setup_ui()
         self._setup_menu()
-        self._setup_toolbar()
         self._setup_autosave()
         self._apply_theme()
 
@@ -124,8 +79,24 @@ class MainWindow(QMainWindow):
     def on_vault_opened(self) -> None:
         if self._app.file_manager:
             self.file_tree.file_manager = self._app.file_manager
+            self._app.chat_manager.set_file_manager(self._app.file_manager)
         self.setWindowTitle(f"{Config.APP_NAME} - {self._app.vault.path}")
         self.statusBar().showMessage(f"Хранилище: {self._app.vault.path}")
+
+    def _toggle_chat_panel(self) -> None:
+        visible = not self._chat_panel.isVisible()
+        self._chat_panel.setVisible(visible)
+        w = max(self._outer_splitter.width(), 800)
+        if visible:
+            self._outer_splitter.setSizes([w - 360, 360])
+        else:
+            self._outer_splitter.setSizes([w, 0])
+
+    def _on_chat_file_created(self, rel_path: str) -> None:
+        self.file_tree.refresh()
+        self.file_tree.select_file(rel_path)
+        self._on_file_selected(rel_path)
+        self.statusBar().showMessage(f"Создано из чата: {rel_path}", 3000)
 
     # ── UI ────────────────────────────────────────────────────
 
@@ -164,15 +135,18 @@ class MainWindow(QMainWindow):
 
         # ── Рабочая область ──
         work_area = QWidget()
+        work_area.setObjectName("workArea")
         work_layout = QVBoxLayout(work_area)
         work_layout.setContentsMargins(0, 0, 0, 0)
         work_layout.setSpacing(0)
 
-        # Компактная верхняя панель: кнопки вида + чат
+        # Компактная панель: режимы вида + чат (без дублирующего QToolBar)
         top_bar = QWidget()
         top_bar.setObjectName("topBar")
+        top_bar.setFixedHeight(26)
         top_bar_layout = QHBoxLayout(top_bar)
-        top_bar_layout.setContentsMargins(4, 2, 4, 2)
+        top_bar_layout.setContentsMargins(6, 0, 6, 0)
+        top_bar_layout.setSpacing(4)
 
         self._btn_editor = self._make_view_btn("Ред.")
         self._btn_preview = self._make_view_btn("Просм.")
@@ -195,6 +169,7 @@ class MainWindow(QMainWindow):
         self._note_title = QLineEdit()
         self._note_title.setObjectName("noteTitle")
         self._note_title.setPlaceholderText("Без названия")
+        self._note_title.setFixedHeight(32)
         self._note_title.editingFinished.connect(self._on_title_changed)
         work_layout.addWidget(self._note_title)
 
@@ -210,12 +185,25 @@ class MainWindow(QMainWindow):
         self._work_splitter.addWidget(self.editor)
         self._work_splitter.addWidget(self.preview)
 
-        work_layout.addWidget(self._work_splitter)
+        work_layout.addWidget(self._work_splitter, stretch=1)
 
         self._set_view_mode("editor")
 
+        self._outer_splitter = QSplitter(Qt.Horizontal)
+        self._outer_splitter.addWidget(work_area)
+
+        self._chat_panel = ChatPanel(self._app)
+        self._chat_panel.hide()
+        self._chat_panel.file_created.connect(self._on_chat_file_created)
+        self._chat_panel.open_settings_requested.connect(self._on_settings)
+        self._outer_splitter.addWidget(self._chat_panel)
+        self._outer_splitter.setStretchFactor(0, 1)
+        self._outer_splitter.setStretchFactor(1, 0)
+
+        self.chat_button.classic_chat_requested.connect(self._toggle_chat_panel)
+
         self._main_splitter.addWidget(sidebar)
-        self._main_splitter.addWidget(work_area)
+        self._main_splitter.addWidget(self._outer_splitter)
         self._main_splitter.setStretchFactor(0, 0)
         self._main_splitter.setStretchFactor(1, 1)
         self._main_splitter.setSizes(
@@ -228,6 +216,8 @@ class MainWindow(QMainWindow):
     def _make_view_btn(self, text: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setFlat(True)
+        btn.setFixedHeight(22)
+        btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         btn.setCursor(Qt.PointingHandCursor)
         return btn
 
@@ -290,36 +280,6 @@ class MainWindow(QMainWindow):
         settings_action.triggered.connect(self._on_settings)
         settings_menu.addAction(settings_action)
 
-    # ── Тулбар ────────────────────────────────────────────────
-
-    def _setup_toolbar(self) -> None:
-        toolbar = QToolBar("Главная")
-        toolbar.setMovable(False)
-        toolbar.setObjectName("mainToolbar")
-        self.addToolBar(toolbar)
-
-        open_action = QAction("Открыть", self)
-        open_action.triggered.connect(self._on_open_vault)
-        toolbar.addAction(open_action)
-
-        new_action = QAction("Новая", self)
-        new_action.triggered.connect(lambda: self._on_create_note(""))
-        toolbar.addAction(new_action)
-
-        folder_action = QAction("Папка", self)
-        folder_action.triggered.connect(lambda: self._on_create_folder(""))
-        toolbar.addAction(folder_action)
-
-        save_action = QAction("Сохранить", self)
-        save_action.triggered.connect(self._save_current)
-        toolbar.addAction(save_action)
-
-        toolbar.addSeparator()
-
-        settings_action = QAction("Настройки", self)
-        settings_action.triggered.connect(self._on_settings)
-        toolbar.addAction(settings_action)
-
     def _setup_autosave(self) -> None:
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setInterval(Config.AUTOSAVE_INTERVAL)
@@ -330,16 +290,19 @@ class MainWindow(QMainWindow):
 
     def _set_view_mode(self, mode: str) -> None:
         self._view_mode = mode
+        dark = self._theme == "dark"
         style_active = (
             "QPushButton { background-color: #4a9eff; color: white; "
-            "border: none; padding: 1px 5px; border-radius: 2px; "
-            "font-size: 10px; font-weight: bold; min-width: 0; }"
+            "border: none; padding: 0 6px; border-radius: 3px; "
+            "font-size: 11px; font-weight: bold; min-width: 0; max-height: 22px; }"
         )
+        inactive_fg = "#aaaaaa" if dark else "#888888"
+        inactive_hover = "#1a1a1a" if dark else "#eeeeee"
         style_inactive = (
-            "QPushButton { background-color: transparent; color: #888; "
-            "border: none; padding: 1px 5px; border-radius: 2px; "
-            "font-size: 10px; min-width: 0; }"
-            "QPushButton:hover { background-color: #ddd; }"
+            f"QPushButton {{ background-color: transparent; color: {inactive_fg}; "
+            "border: none; padding: 0 6px; border-radius: 3px; "
+            "font-size: 11px; min-width: 0; max-height: 22px; }"
+            f"QPushButton:hover {{ background-color: {inactive_hover}; }}"
         )
 
         for btn, m in [
@@ -380,16 +343,11 @@ class MainWindow(QMainWindow):
         self._current_path = rel_path
         self.editor.load_content(rel_path, content)
 
-        filename = rel_path.split("/")[-1]
-        if filename.endswith(".mermaid.md"):
-            title = filename[:-11]
-        elif filename.endswith(".md"):
-            title = filename[:-3]
-        else:
-            title = filename.rsplit(".", 1)[0] if "." in filename else filename
-        self._note_title.setText(title)
+        self._note_title.setText(_title_from_path(rel_path))
 
-        if self._view_mode in ("preview", "split"):
+        if is_mermaid_note(rel_path):
+            self._set_view_mode("split")
+        elif self._view_mode in ("preview", "split"):
             self._update_preview()
 
         self.statusBar().showMessage(f"Открыт: {rel_path}")
@@ -400,10 +358,11 @@ class MainWindow(QMainWindow):
 
     def _update_preview(self) -> None:
         text = self.editor.toPlainText()
+        path = self._current_path
         if self._theme == "dark":
-            html = self._app.md_parser.get_preview_html_dark(text)
+            html = self._app.md_parser.get_preview_html_dark(text, path=path)
         else:
-            html = self._app.md_parser.get_preview_html(text)
+            html = self._app.md_parser.get_preview_html(text, path=path)
         self.preview.set_html(html)
 
     def _save_current(self) -> None:
@@ -428,7 +387,7 @@ class MainWindow(QMainWindow):
         if not new_title:
             return
         parts = self._current_path.rsplit("/", 1)
-        ext = ".mermaid.md" if self._current_path.endswith(".mermaid.md") else ".md"
+        ext = _extension_for_path(self._current_path)
         new_rel = f"{parts[0]}/{new_title}{ext}" if len(parts) == 2 else f"{new_title}{ext}"
         if new_rel == self._current_path:
             return
@@ -446,14 +405,7 @@ class MainWindow(QMainWindow):
         if self._current_path == old_path:
             self._current_path = new_path
             self.editor.current_path = new_path
-            filename = new_path.split("/")[-1]
-            if filename.endswith(".mermaid.md"):
-                title = filename[:-11]
-            elif filename.endswith(".md"):
-                title = filename[:-3]
-            else:
-                title = filename.rsplit(".", 1)[0] if "." in filename else filename
-            self._note_title.setText(title)
+            self._note_title.setText(_title_from_path(new_path))
             self.statusBar().showMessage(f"Перемещен: {old_path} -> {new_path}", 2000)
 
     def _require_vault(self) -> bool:
@@ -478,13 +430,12 @@ class MainWindow(QMainWindow):
         if not ok or not name.strip():
             return
         name = name.strip()
-        ext = ".mermaid.md" if is_mermaid else ".md"
+        ext = ".mermaid" if is_mermaid else ".md"
         rel = f"{parent_path}/{name}{ext}" if parent_path else f"{name}{ext}"
         try:
             path = self._app.file_manager.create_note(rel)
             if is_mermaid:
-                template = "```mermaid\ngraph TD\n    A[Начало] --> B[Конец]\n```\n"
-                self._app.file_manager.write_file(rel, template)
+                self._app.file_manager.write_file(rel, default_mermaid_template())
             self.file_tree.refresh()
             rel_path = str(path.relative_to(self._app.vault.path)).replace("\\", "/")
             self._on_file_selected(rel_path)
@@ -542,6 +493,8 @@ class MainWindow(QMainWindow):
             self.setStyleSheet(THEME_DARK)
         else:
             self.setStyleSheet(THEME_LIGHT)
+        self.editor.set_theme(self._theme == "dark")
+        self._set_view_mode(self._view_mode)
 
     def closeEvent(self, event) -> None:
         self._save_current()

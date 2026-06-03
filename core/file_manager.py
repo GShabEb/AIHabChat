@@ -5,10 +5,18 @@ from pathlib import Path
 from typing import Generator
 
 
+def _is_note_file(path: Path) -> bool:
+    """Поддерживаемые заметки: md, mermaid, mmd."""
+    name = path.name.lower()
+    if name.endswith(".mermaid.md") or name.endswith(".mermaid") or name.endswith(".mmd"):
+        return True
+    return path.suffix.lower() in {".md", ".txt", ".markdown"}
+
+
 class FileManager:
     """Менеджер файлов хранилища."""
 
-    SUPPORTED_EXTENSIONS = {".md", ".txt", ".markdown"}
+    SUPPORTED_EXTENSIONS = {".md", ".txt", ".markdown", ".mermaid", ".mmd"}
 
     def __init__(self, vault_path: Path) -> None:
         self._root = vault_path
@@ -31,8 +39,16 @@ class FileManager:
     # ── создание / удаление ──────────────────────────────────
 
     def create_note(self, relative_path: str) -> Path:
-        """Создать пустую заметку (.md). Если расширение не указано — добавляет .md."""
-        if not relative_path.endswith(".md"):
+        """Создать пустую заметку. Без расширения — добавляет .md."""
+        lower = relative_path.lower()
+        has_ext = (
+            lower.endswith(".md")
+            or lower.endswith(".mermaid")
+            or lower.endswith(".mmd")
+            or lower.endswith(".txt")
+            or lower.endswith(".markdown")
+        )
+        if not has_ext:
             relative_path += ".md"
         full = self._resolve(relative_path)
         full.parent.mkdir(parents=True, exist_ok=True)
@@ -68,10 +84,7 @@ class FileManager:
         target = self._resolve(relative_dir)
         if not target.is_dir():
             return []
-        return sorted(
-            p for p in target.rglob("*") if p.is_file()
-            and p.suffix.lower() in self.SUPPORTED_EXTENSIONS
-        )
+        return sorted(p for p in target.rglob("*") if p.is_file() and _is_note_file(p))
 
     def walk_tree(self, relative_dir: str = "") -> list[dict]:
         """
@@ -112,7 +125,7 @@ class FileManager:
                     "path": str(rel).replace("\\", "/"),
                     "children": children,
                 })
-            elif entry.suffix.lower() in self.SUPPORTED_EXTENSIONS:
+            elif _is_note_file(entry):
                 items.append({
                     "name": entry.name,
                     "type": "file",

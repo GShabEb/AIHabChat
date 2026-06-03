@@ -54,6 +54,15 @@ class Config:
         cls._settings.setdefault("show_line_numbers", True)
         cls._settings.setdefault("show_md_hints", True)
         cls._settings.setdefault("live_preview", True)
+        cls._settings.setdefault("llm_base_url", "https://api.claudehub.fun")
+        url = cls._settings.get("llm_base_url", "")
+        if "://app.claudehub.fun" in url:
+            cls._settings["llm_base_url"] = url.replace(
+                "://app.claudehub.fun", "://api.claudehub.fun"
+            )
+        cls._settings.setdefault("llm_api_key", "")
+        cls._settings.setdefault("llm_model", "")
+        cls._settings.setdefault("llm_models", [])
         return cls._settings
 
     @classmethod
