@@ -28,3 +28,15 @@ desktop.ini
 *.log
 .env
 config.json
+
+# Runtime data (keep directory structure via .gitkeep)
+data/cache/*
+data/logs/*
+data/temp/*
+!data/cache/.gitkeep
+!data/logs/.gitkeep
+!data/temp/.gitkeep
+
+# User vaults (local note storage)
+user_vaults/*
+!user_vaults/.gitkeep

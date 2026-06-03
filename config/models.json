@@ -1,0 +1,20 @@
+{
+  "providers": {
+    "claudehub": {
+      "label": "ClaudeHub",
+      "default_base_url": "https://api.claudehub.fun"
+    },
+    "openrouter": {
+      "label": "OpenRouter",
+      "default_base_url": "https://openrouter.ai/api"
+    },
+    "ollama": {
+      "label": "Ollama",
+      "default_base_url": "http://localhost:11434"
+    },
+    "local": {
+      "label": "Local",
+      "default_base_url": "http://127.0.0.1:8080"
+    }
+  }
+}

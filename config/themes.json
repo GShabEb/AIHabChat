@@ -1,0 +1,15 @@
+{
+  "themes": [
+    {
+      "id": "light",
+      "label": "Светлая",
+      "stylesheet": "light"
+    },
+    {
+      "id": "dark",
+      "label": "Тёмная",
+      "stylesheet": "dark"
+    }
+  ],
+  "default": "light"
+}

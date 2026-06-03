@@ -11,7 +11,7 @@ project_root = Path(__file__).resolve().parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from app.application import Application
+from gui.application import Application
 
 
 def main() -> int:

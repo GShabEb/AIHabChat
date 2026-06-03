@@ -7,55 +7,52 @@ LLM-хаб с Markdown-редактором заметок (аналог Obsidia
 - **Хранилище (Vault)** — выбор root-папки для заметок (как в Obsidian)
 - **Дерево файлов** — навигация по заметкам в формате tree
 - **Редактор Markdown** — редактирование с монопространственным шрифтом
-- **Предпросмотр** — рендеринг Markdown → HTML
+- **Предпросмотр** — рендеринг Markdown → HTML, Mermaid-диаграммы
 - **Разделённый вид** — редактор и предпросмотр рядом
 - **Автосохранение** — автоматическое сохранение каждые 3 секунды
-- **Чат (заглушка)** — кнопка с двумя режимами (классический / полноценный), в разработке
+- **Классический чат** — LLM с инструментами создания заметок и диаграмм
 
 ## Структура проекта
 
 ```
 AiHabChat/
-├── main.py                  # Точка входа
-├── requirements.txt         # Зависимости
+├── main.py                      # Точка входа
+├── requirements.txt
 ├── README.md
-├── .gitignore
-│
-├── app/                     # GUI-слой (PySide6)
-│   ├── application.py       # Инициализация приложения
-│   ├── config.py            # Конфигурация
-│   ├── dialogs/
-│   │   └── vault_dialog.py  # Диалог выбора хранилища
-│   ├── windows/
-│   │   └── main_window.py   # Главное окно
-│   └── widgets/
-│       ├── file_tree.py     # Дерево файлов
-│       ├── editor.py        # Редактор Markdown
-│       ├── preview.py       # Предпросмотр HTML
-│       └── chat_button.py   # Кнопка чата
-│
-├── core/                    # Бизнес-логика
-│   ├── vault.py             # Управление хранилищем
-│   ├── file_manager.py      # Работа с файлами
-│   └── markdown_parser.py   # Парсер Markdown → HTML
-│
-├── llm/                     # LLM-интеграция (заготовка)
-│   ├── chat_manager.py      # Менеджер чата
-│   └── tools/               # Инструменты для LLM
-│
-└── resources/
-    └── icons/               # Иконки (пока пусто)
+├── config/
+│   ├── app_config.json          # Константы приложения
+│   ├── models.json              # Метаданные LLM-провайдеров
+│   └── themes.json              # Метаданные тем
+├── gui/                         # GUI (PySide6)
+│   ├── application.py
+│   ├── themes/styles.py
+│   ├── windows/                 # main_window, settings_window, vault_dialog
+│   └── widgets/                 # note, tree, preview, chat
+├── core/
+│   ├── config/config_manager.py # Config + пользовательские настройки
+│   ├── vault/                   # vault_manager, file_manager, markdown_parser
+│   ├── services/                # export, sync, indexing (заготовки)
+│   └── events/event_bus.py
+├── llm/
+│   ├── providers/               # base, claudehub, openrouter, ollama, local
+│   ├── chat/chat_manager.py
+│   ├── context/                 # заготовки
+│   ├── memory/                  # заготовки
+│   └── tools/                   # create_note, tool_manager, export
+├── rp/                          # character_manager, rp_engine (заготовки)
+├── mobile_api/                  # api_server, auth, routes/ (заготовки)
+├── data/cache, logs, temp/
+├── tests/
+└── user_vaults/                 # локальные хранилища (не в git)
 ```
 
 ## Установка
 
 ```bash
-# Создать виртуальное окружение (рекомендуется)
 python -m venv venv
 venv\Scripts\activate      # Windows
 # source venv/bin/activate  # Linux/macOS
 
-# Установить зависимости
 pip install -r requirements.txt
 ```
 
@@ -76,11 +73,8 @@ python main.py
 
 ## Планы
 
-- [ ] Интеграция с LLM-провайдерами (OpenAI, Anthropic, локальные)
-- [ ] Классический чат (боковая панель)
+- [ ] OpenRouter, Ollama, локальные провайдеры
 - [ ] Полноценный чат (отдельное окно)
-- [ ] LLM-инструменты (поиск по заметкам, создание/чтение файлов)
-- [ ] Подсветка синтаксиса Markdown в редакторе
-- [ ] Поиск по заметкам
-- [ ] Теги и обратные ссылки (wikilinks)
-- [ ] Темы оформления (тёмная/светлая)
+- [ ] Поиск по заметкам, индексация
+- [ ] Wikilinks и обратные ссылки
+- [ ] Mobile API
