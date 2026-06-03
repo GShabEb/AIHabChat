@@ -6,13 +6,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QSplitter,
-    QStackedWidget,
     QToolBar,
     QLabel,
+    QLineEdit,
     QFileDialog,
     QMessageBox,
     QInputDialog,
     QStatusBar,
+    QPushButton,
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
@@ -23,26 +24,74 @@ from app.widgets.editor import EditorWidget
 from app.widgets.preview import PreviewWidget
 from app.widgets.chat_button import ChatButton
 from app.dialogs.vault_dialog import VaultDialog
+from app.dialogs.settings_dialog import SettingsDialog
+
+
+# ── Таблицы стилей ────────────────────────────────────────────
+
+THEME_LIGHT = """
+QMainWindow { background: #ffffff; }
+#sidebar { background: #f5f5f5; border-right: 1px solid #ddd; }
+#sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
+                 background-color: #e8e8e8; border-bottom: 1px solid #ccc; }
+#topBar { background-color: #f0f0f0; border-bottom: 1px solid #ccc; }
+#noteTitle { color: #222; }
+QMenuBar { background: #f5f5f5; }
+QToolBar { background: #f8f8f8; border-bottom: 1px solid #ddd; spacing: 4px; padding: 2px; }
+QStatusBar { background: #f0f0f0; color: #555; }
+QTreeWidget { background: #fafafa; border: none; }
+QTreeWidget::item:selected { background: #4a9eff; color: white; }
+QPlainTextEdit { background-color: #fafafa; border: none; padding: 8px; padding-left: 4px; }
+QTextBrowser { background-color: #ffffff; border: none; padding: 8px; }
+QLabel { color: #222; }
+"""
+
+THEME_DARK = """
+QMainWindow { background: #1e1e1e; color: #ddd; }
+#sidebar { background: #252526; border-right: 1px solid #444; }
+#sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
+                 background-color: #333; border-bottom: 1px solid #444; color: #ddd; }
+#topBar { background-color: #2d2d2d; border-bottom: 1px solid #444; }
+#noteTitle { color: #ddd; }
+QMenuBar { background: #2d2d2d; color: #ddd; }
+QMenuBar::item:selected { background: #3a3a3a; }
+QMenu { background: #2d2d2d; color: #ddd; }
+QMenu::item:selected { background: #4a9eff; }
+QToolBar { background: #2d2d2d; border-bottom: 1px solid #444; spacing: 4px; padding: 2px; color: #ddd; }
+QStatusBar { background: #2d2d2d; color: #aaa; }
+QTreeWidget { background: #252526; border: none; color: #ddd; }
+QTreeWidget::item:selected { background: #4a9eff; color: white; }
+QTreeWidget::item:hover { background: #3a3a3a; }
+QPlainTextEdit { background-color: #1e1e1e; color: #ddd; border: none;
+                 padding: 8px; padding-left: 4px; }
+QTextBrowser { background-color: #1e1e1e; color: #ddd; border: none; padding: 8px; }
+QLabel { color: #ddd; }
+QLineEdit { color: #ddd; }
+QSplitter::handle { background: #444; }
+QScrollBar:vertical { background: #2d2d2d; width: 10px; }
+QScrollBar::handle:vertical { background: #555; border-radius: 4px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+"""
 
 
 class MainWindow(QMainWindow):
-    """Главное окно: сайдбар с деревом + редактор/превью + чат."""
+    """Главное окно: сайдбар + редактор/превью + чат."""
 
     def __init__(self, app) -> None:
         super().__init__()
-        self._app = app  # ссылка на Application
+        self._app = app
         self._current_path: str = ""
-        self._view_mode: str = "editor"  # "editor" | "preview" | "split"
+        self._view_mode: str = "editor"
+        self._theme: str = Config.get("theme", "light")
+
         self._setup_ui()
         self._setup_menu()
         self._setup_toolbar()
         self._setup_autosave()
+        self._apply_theme()
 
-        # Если хранилище уже было открыто ранее
         if self._app.vault.is_open:
             self.on_vault_opened()
-        else:
-            self._show_welcome()
 
     # ── публичные методы ─────────────────────────────────────
 
@@ -51,7 +100,6 @@ class MainWindow(QMainWindow):
         if self._app.file_manager:
             self.file_tree.file_manager = self._app.file_manager
         self.setWindowTitle(f"{Config.APP_NAME} — {self._app.vault.path}")
-        self._hide_welcome()
         self.statusBar().showMessage(f"Хранилище: {self._app.vault.path}")
 
     # ── UI ────────────────────────────────────────────────────
@@ -60,30 +108,24 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(Config.MIN_WIDTH, Config.MIN_HEIGHT)
         self.resize(Config.DEFAULT_WIDTH, Config.DEFAULT_HEIGHT)
 
-        # Центральный виджет
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Сплиттер: сайдбар | основная область
-        splitter = QSplitter(Qt.Horizontal)
+        # Главный сплиттер
+        self._main_splitter = QSplitter(Qt.Horizontal)
 
         # ── Сайдбар ──
         sidebar = QWidget()
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Заголовок сайдбара
-        sidebar_header = QLabel("📂 Хранилище")
-        sidebar_header.setStyleSheet(
-            "padding: 8px; font-weight: bold; font-size: 13px; "
-            "background-color: #e8e8e8; border-bottom: 1px solid #ccc;"
-        )
+        sidebar_header = QLabel("Хранилище")
+        sidebar_header.setObjectName("sidebarHeader")
         sidebar_layout.addWidget(sidebar_header)
 
-        # Дерево файлов
         self.file_tree = FileTreeWidget()
         self.file_tree.file_selected.connect(self._on_file_selected)
         self.file_tree.create_note_requested.connect(self._on_create_note)
@@ -93,91 +135,85 @@ class MainWindow(QMainWindow):
 
         sidebar.setMinimumWidth(Config.SIDEBAR_MIN_WIDTH)
         sidebar.setMaximumWidth(Config.SIDEBAR_MAX_WIDTH)
+        sidebar.setObjectName("sidebar")
 
-        # ── Основная область (редактор + превью) ──
+        # ── Рабочая область ──
         work_area = QWidget()
         work_layout = QVBoxLayout(work_area)
         work_layout.setContentsMargins(0, 0, 0, 0)
         work_layout.setSpacing(0)
 
-        # Панель вкладок редактор/превью/разделённый
-        view_bar = QWidget()
-        view_bar.setStyleSheet("background-color: #f0f0f0; border-bottom: 1px solid #ccc;")
-        view_bar_layout = QHBoxLayout(view_bar)
-        view_bar_layout.setContentsMargins(8, 4, 8, 4)
+        # Верхняя панель: название + кнопки вида + чат
+        top_bar = QWidget()
+        top_bar.setObjectName("topBar")
+        top_bar_layout = QHBoxLayout(top_bar)
+        top_bar_layout.setContentsMargins(8, 4, 8, 4)
 
-        self._btn_editor = QPushButton_("✏️ Редактор")
-        self._btn_preview = QPushButton_("👁 Предпросмотр")
-        self._btn_split = QPushButton_("⛶ Разделённый")
+        self._note_title = QLineEdit()
+        self._note_title.setPlaceholderText("Название заметки...")
+        self._note_title.setObjectName("noteTitle")
+        self._note_title.setStyleSheet(
+            "QLineEdit { border: none; font-size: 15px; font-weight: bold; "
+            "padding: 4px 8px; background: transparent; }"
+        )
+        self._note_title.editingFinished.connect(self._on_title_changed)
+        top_bar_layout.addWidget(self._note_title, 1)
+
+        self._btn_editor = self._make_view_btn("Редактор")
+        self._btn_preview = self._make_view_btn("Предпросмотр")
+        self._btn_split = self._make_view_btn("Разделенный")
         self._btn_editor.clicked.connect(lambda: self._set_view_mode("editor"))
         self._btn_preview.clicked.connect(lambda: self._set_view_mode("preview"))
         self._btn_split.clicked.connect(lambda: self._set_view_mode("split"))
 
         for btn in (self._btn_editor, self._btn_preview, self._btn_split):
-            view_bar_layout.addWidget(btn)
-        view_bar_layout.addStretch()
+            top_bar_layout.addWidget(btn)
 
-        # Кнопка чата
         self.chat_button = ChatButton()
-        view_bar_layout.addWidget(self.chat_button)
+        top_bar_layout.addWidget(self.chat_button)
 
-        work_layout.addWidget(view_bar)
+        work_layout.addWidget(top_bar)
 
-        # Стек: редактор / превью / сплиттер
-        self._stack = QStackedWidget()
+        # Рабочий сплиттер (редактор | превью)
+        self._work_splitter = QSplitter(Qt.Horizontal)
 
-        # Страница 0: только редактор
         self.editor = EditorWidget()
         self.editor.content_changed.connect(self._on_content_changed)
         self.editor.save_requested.connect(self._save_current)
-        self._stack.addWidget(self.editor)
 
-        # Страница 1: только превью
         self.preview = PreviewWidget()
-        self._stack.addWidget(self.preview)
 
-        # Страница 2: разделённый вид
-        split_view = QSplitter(Qt.Horizontal)
-        self._split_editor = EditorWidget()
-        self._split_editor.content_changed.connect(self._on_content_changed)
-        self._split_editor.save_requested.connect(self._save_current)
-        self._split_preview = PreviewWidget()
-        split_view.addWidget(self._split_editor)
-        split_view.addWidget(self._split_preview)
-        self._stack.addWidget(split_view)
+        self._work_splitter.addWidget(self.editor)
+        self._work_splitter.addWidget(self.preview)
 
-        work_layout.addWidget(self._stack)
-
-        # Добро пожаловать (welcome screen)
-        self._welcome = QLabel()
-        self._welcome.setAlignment(Qt.AlignCenter)
-        self._welcome.setStyleSheet("font-size: 18px; color: #999;")
-        self._welcome.setText(
-            "👋 Добро пожаловать в AiHabChat!\n\n"
-            "Откройте или создайте хранилище (Vault)\n"
-            "через меню Файл → Открыть хранилище"
-        )
-        self._welcome.hide()
-
-        # Добавляем в сплиттер
-        splitter.addWidget(sidebar)
-        splitter.addWidget(work_area)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([Config.SIDEBAR_DEFAULT_WIDTH, Config.DEFAULT_WIDTH - Config.SIDEBAR_DEFAULT_WIDTH])
-
-        main_layout.addWidget(splitter)
-
-        # Статусбар
-        self.setStatusBar(QStatusBar())
+        work_layout.addWidget(self._work_splitter)
 
         # Начальный режим
         self._set_view_mode("editor")
 
+        # Добавляем в главный сплиттер
+        self._main_splitter.addWidget(sidebar)
+        self._main_splitter.addWidget(work_area)
+        self._main_splitter.setStretchFactor(0, 0)
+        self._main_splitter.setStretchFactor(1, 1)
+        self._main_splitter.setSizes(
+            [Config.SIDEBAR_DEFAULT_WIDTH, Config.DEFAULT_WIDTH - Config.SIDEBAR_DEFAULT_WIDTH]
+        )
+
+        main_layout.addWidget(self._main_splitter)
+        self.setStatusBar(QStatusBar())
+
+    def _make_view_btn(self, text: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setFlat(True)
+        btn.setCursor(Qt.PointingHandCursor)
+        return btn
+
+    # ── Меню ─────────────────────────────────────────────────
+
     def _setup_menu(self) -> None:
         menubar = self.menuBar()
 
-        # Файл
         file_menu = menubar.addMenu("Файл")
 
         open_vault = QAction("Открыть хранилище...", self)
@@ -189,6 +225,10 @@ class MainWindow(QMainWindow):
         new_note.setShortcut("Ctrl+N")
         new_note.triggered.connect(lambda: self._on_create_note(""))
         file_menu.addAction(new_note)
+
+        new_folder = QAction("Новая папка", self)
+        new_folder.triggered.connect(lambda: self._on_create_folder(""))
+        file_menu.addAction(new_folder)
 
         file_menu.addSeparator()
 
@@ -204,7 +244,6 @@ class MainWindow(QMainWindow):
         quit_app.triggered.connect(self.close)
         file_menu.addAction(quit_app)
 
-        # Вид
         view_menu = menubar.addMenu("Вид")
 
         mode_editor = QAction("Редактор", self)
@@ -215,36 +254,53 @@ class MainWindow(QMainWindow):
         mode_preview.triggered.connect(lambda: self._set_view_mode("preview"))
         view_menu.addAction(mode_preview)
 
-        mode_split = QAction("Разделённый", self)
+        mode_split = QAction("Разделенный", self)
         mode_split.triggered.connect(lambda: self._set_view_mode("split"))
         view_menu.addAction(mode_split)
+
+        settings_menu = menubar.addMenu("Настройки")
+
+        settings_action = QAction("Настройки...", self)
+        settings_action.triggered.connect(self._on_settings)
+        settings_menu.addAction(settings_action)
+
+    # ── Тулбар ────────────────────────────────────────────────
 
     def _setup_toolbar(self) -> None:
         toolbar = QToolBar("Главная")
         toolbar.setMovable(False)
-        toolbar.setStyleSheet("QToolBar { spacing: 4px; padding: 2px; }")
+        toolbar.setObjectName("mainToolbar")
         self.addToolBar(toolbar)
 
-        open_action = QAction("📂 Открыть", self)
+        open_action = QAction("Открыть", self)
         open_action.triggered.connect(self._on_open_vault)
         toolbar.addAction(open_action)
 
-        new_action = QAction("📝 Новая", self)
+        new_action = QAction("Новая", self)
         new_action.triggered.connect(lambda: self._on_create_note(""))
         toolbar.addAction(new_action)
 
-        save_action = QAction("💾 Сохранить", self)
+        folder_action = QAction("Папка", self)
+        folder_action.triggered.connect(lambda: self._on_create_folder(""))
+        toolbar.addAction(folder_action)
+
+        save_action = QAction("Сохранить", self)
         save_action.triggered.connect(self._save_current)
         toolbar.addAction(save_action)
 
+        toolbar.addSeparator()
+
+        settings_action = QAction("Настройки", self)
+        settings_action.triggered.connect(self._on_settings)
+        toolbar.addAction(settings_action)
+
     def _setup_autosave(self) -> None:
-        """Таймер автосохранения."""
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setInterval(Config.AUTOSAVE_INTERVAL)
         self._autosave_timer.timeout.connect(self._autosave)
         self._autosave_timer.start()
 
-    # ── режимы отображения ───────────────────────────────────
+    # ── Режимы отображения ───────────────────────────────────
 
     def _set_view_mode(self, mode: str) -> None:
         self._view_mode = mode
@@ -266,22 +322,25 @@ class MainWindow(QMainWindow):
             btn.setStyleSheet(style_active if m == mode else style_inactive)
 
         if mode == "editor":
-            self._stack.setCurrentIndex(0)
+            self.editor.show()
+            self.preview.hide()
         elif mode == "preview":
+            self.editor.hide()
+            self.preview.show()
             self._update_preview()
-            self._stack.setCurrentIndex(1)
         elif mode == "split":
-            self._update_split_preview()
-            self._stack.setCurrentIndex(2)
+            self.editor.show()
+            self.preview.show()
+            self._update_preview()
+            w = self._work_splitter.width()
+            self._work_splitter.setSizes([w // 2, w // 2])
 
-    # ── работа с файлами ─────────────────────────────────────
+    # ── Работа с файлами ─────────────────────────────────────
 
     def _on_file_selected(self, rel_path: str) -> None:
-        """Файл выбран в дереве — открыть в редакторе."""
         if not self._app.file_manager:
             return
 
-        # Сохранить текущий
         self._save_current()
 
         try:
@@ -293,38 +352,31 @@ class MainWindow(QMainWindow):
         self._current_path = rel_path
         self.editor.load_content(rel_path, content)
 
-        # Обновить превью, если нужно
-        if self._view_mode == "preview":
+        # Название заметки из имени файла
+        filename = rel_path.split("/")[-1]
+        title = filename.rsplit(".", 1)[0] if "." in filename else filename
+        self._note_title.setText(title)
+
+        if self._view_mode in ("preview", "split"):
             self._update_preview()
-        elif self._view_mode == "split":
-            self._update_split_preview()
 
         self.statusBar().showMessage(f"Открыт: {rel_path}")
 
     def _on_content_changed(self) -> None:
-        """Контент в редакторе изменён — обновить превью."""
-        if self._view_mode == "split":
-            self._update_split_preview()
-        elif self._view_mode == "preview":
+        if self._view_mode in ("preview", "split"):
             self._update_preview()
 
     def _update_preview(self) -> None:
-        """Обновить превью основным редактором."""
-        html = self._app.md_parser.get_preview_html(self.editor.toPlainText())
+        text = self.editor.toPlainText()
+        if self._theme == "dark":
+            html = self._app.md_parser.get_preview_html_dark(text)
+        else:
+            html = self._app.md_parser.get_preview_html(text)
         self.preview.set_html(html)
 
-    def _update_split_preview(self) -> None:
-        """Обновить превью в разделённом режиме."""
-        # Синхронизируем тексты
-        self._split_editor.load_content(self.editor.current_path, self.editor.toPlainText())
-        html = self._app.md_parser.get_preview_html(self._split_editor.toPlainText())
-        self._split_preview.set_html(html)
-
     def _save_current(self) -> None:
-        """Сохранить текущую заметку."""
         if not self._current_path or not self._app.file_manager:
             return
-
         content = self.editor.toPlainText()
         try:
             self._app.file_manager.write_file(self._current_path, content)
@@ -334,14 +386,49 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка сохранения", str(e))
 
     def _autosave(self) -> None:
-        """Автосохранение при изменениях."""
         if self._current_path and self.editor.is_modified and self._app.file_manager:
             self._save_current()
 
-    # ── создание / удаление ──────────────────────────────────
+    # ── Название заметки ─────────────────────────────────────
+
+    def _on_title_changed(self) -> None:
+        if not self._current_path or not self._app.file_manager:
+            return
+
+        new_title = self._note_title.text().strip()
+        if not new_title:
+            return
+
+        parts = self._current_path.rsplit("/", 1)
+        new_rel = f"{parts[0]}/{new_title}.md" if len(parts) == 2 else f"{new_title}.md"
+
+        if new_rel == self._current_path:
+            return
+
+        try:
+            self._app.file_manager.rename(self._current_path, new_rel)
+            self._current_path = new_rel
+            self.editor.current_path = new_rel
+            self.file_tree.refresh()
+            self.file_tree.select_file(new_rel)
+            self.statusBar().showMessage(f"Переименован: {new_rel}", 2000)
+        except OSError as e:
+            QMessageBox.warning(self, "Ошибка переименования", str(e))
+
+    # ── Создание / удаление ──────────────────────────────────
+
+    def _require_vault(self) -> bool:
+        """Проверить, что хранилище открыто."""
+        if not self._app.file_manager:
+            QMessageBox.warning(self, "Нет хранилища",
+                                "Сначала откройте хранилище (Ctrl+O)")
+            return False
+        return True
 
     def _on_create_note(self, parent_path: str) -> None:
-        """Создать новую заметку."""
+        if not self._require_vault():
+            return
+
         name, ok = QInputDialog.getText(
             self, "Новая заметка", "Имя заметки:", text="Новая заметка"
         )
@@ -353,17 +440,16 @@ class MainWindow(QMainWindow):
         try:
             path = self._app.file_manager.create_note(rel)
             self.file_tree.refresh()
-            # Открыть созданную заметку
             rel_path = str(path.relative_to(self._app.vault.path)).replace("\\", "/")
             self._on_file_selected(rel_path)
         except OSError as e:
             QMessageBox.warning(self, "Ошибка", f"Не удалось создать заметку:\n{e}")
 
     def _on_create_folder(self, parent_path: str) -> None:
-        """Создать новую папку."""
-        name, ok = QInputDialog.getText(
-            self, "Новая папка", "Имя папки:"
-        )
+        if not self._require_vault():
+            return
+
+        name, ok = QInputDialog.getText(self, "Новая папка", "Имя папки:")
         if not ok or not name.strip():
             return
 
@@ -376,11 +462,11 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", f"Не удалось создать папку:\n{e}")
 
     def _on_delete(self, rel_path: str) -> None:
-        """Удалить файл или папку."""
+        if not self._require_vault():
+            return
+
         reply = QMessageBox.question(
-            self,
-            "Удалить?",
-            f"Удалить {rel_path}?",
+            self, "Удалить?", f"Удалить {rel_path}?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
@@ -391,40 +477,39 @@ class MainWindow(QMainWindow):
             if self._current_path == rel_path:
                 self.editor.clear_editor()
                 self._current_path = ""
+                self._note_title.setText("")
             self.file_tree.refresh()
         except OSError as e:
             QMessageBox.warning(self, "Ошибка", f"Не удалось удалить:\n{e}")
 
-    # ── хранилище ────────────────────────────────────────────
+    # ── Хранилище ────────────────────────────────────────────
 
     def _on_open_vault(self) -> None:
-        """Открыть диалог выбора хранилища."""
         dialog = VaultDialog(self)
         if dialog.exec():
             self._app.open_vault(dialog.selected_path)
 
-    # ── welcome ──────────────────────────────────────────────
+    # ── Настройки ────────────────────────────────────────────
 
-    def _show_welcome(self) -> None:
-        self._welcome.show()
+    def _on_settings(self) -> None:
+        dialog = SettingsDialog(self)
+        if dialog.exec():
+            self._apply_theme()
+            self.editor.apply_settings()
+            if self._view_mode in ("preview", "split"):
+                self._update_preview()
+            self.statusBar().showMessage("Настройки применены", 2000)
 
-    def _hide_welcome(self) -> None:
-        self._welcome.hide()
+    def _apply_theme(self) -> None:
+        """Применить текущую тему."""
+        self._theme = Config.get("theme", "light")
+        if self._theme == "dark":
+            self.setStyleSheet(THEME_DARK)
+        else:
+            self.setStyleSheet(THEME_LIGHT)
 
-    # ── закрытие ─────────────────────────────────────────────
+    # ── Закрытие ─────────────────────────────────────────────
 
     def closeEvent(self, event) -> None:
-        """Сохранить перед закрытием."""
         self._save_current()
         super().closeEvent(event)
-
-
-# ── вспомогательная функция ──────────────────────────────────
-
-
-def QPushButton_(text: str) -> "QPushButton":
-    """Создать кнопку-переключатель вида."""
-    from PySide6.QtWidgets import QPushButton
-    btn = QPushButton(text)
-    btn.setFlat(True)
-    return btn

@@ -22,6 +22,9 @@ class Application:
         self._qt_app.setApplicationVersion(Config.APP_VERSION)
         self._qt_app.setOrganizationName(Config.ORG_NAME)
 
+        # Загрузить настройки
+        Config.load_settings()
+
         # Ядро
         self.vault = Vault()
         self.file_manager: FileManager | None = None

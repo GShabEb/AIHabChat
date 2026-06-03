@@ -1,13 +1,16 @@
-"""Глобальная конфигурация приложения."""
+"""Глобальная конфигурация и пользовательские настройки приложения."""
 
+import json
 from pathlib import Path
+
+CONFIG_FILE = Path.home() / ".aihabchat" / "settings.json"
 
 
 class Config:
     """Константы и настройки приложения."""
 
     APP_NAME = "AiHabChat"
-    APP_VERSION = "0.1.0"
+    APP_VERSION = "0.2.0"
     ORG_NAME = "AiHabChat"
 
     # Размеры окна по умолчанию
@@ -29,3 +32,44 @@ class Config:
 
     # Интервал автосохранения (мс)
     AUTOSAVE_INTERVAL = 3000
+
+    # ── пользовательские настройки ────────────────────────────
+
+    _settings: dict = {}
+
+    @classmethod
+    def load_settings(cls) -> dict:
+        """Загрузить настройки из файла."""
+        if CONFIG_FILE.exists():
+            try:
+                cls._settings = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                cls._settings = {}
+        else:
+            cls._settings = {}
+
+        # значения по умолчанию
+        cls._settings.setdefault("theme", "light")
+        cls._settings.setdefault("tab_size", 4)
+        cls._settings.setdefault("show_line_numbers", True)
+        cls._settings.setdefault("show_md_hints", True)
+        cls._settings.setdefault("live_preview", True)
+        return cls._settings
+
+    @classmethod
+    def save_settings(cls) -> None:
+        """Сохранить настройки в файл."""
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_FILE.write_text(
+            json.dumps(cls._settings, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def get(cls, key: str, default=None):
+        return cls._settings.get(key, default)
+
+    @classmethod
+    def set(cls, key: str, value) -> None:
+        cls._settings[key] = value
+        cls.save_settings()
