@@ -1,4 +1,4 @@
-"""Дерево файлов хранилища — навигация по заметкам."""
+"""Дерево файлов хранилища — навигация по заметкам с drag-and-drop."""
 
 from PySide6.QtWidgets import (
     QTreeWidget,
@@ -6,23 +6,28 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QMenu,
 )
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QMimeData
+from PySide6.QtGui import QDrag
 
 from core.file_manager import FileManager
 
 
 class FileTreeWidget(QTreeWidget):
-    """Дерево файлов vault с контекстным меню."""
+    """Дерево файлов vault с контекстным меню и drag-and-drop."""
 
     # Сигналы
-    file_selected = Signal(str)       # относительный путь к файлу
+    file_selected = Signal(str)          # относительный путь к файлу
     create_note_requested = Signal(str)  # папка, в которой создать заметку
     create_folder_requested = Signal(str)
-    delete_requested = Signal(str)     # относительный путь
+    delete_requested = Signal(str)       # относительный путь
+    file_moved = Signal(str, str)        # (old_path, new_path)
+
+    MIME_TYPE = "application/x-aihabchat-file"
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._file_manager: FileManager | None = None
+        self._drag_item: QTreeWidgetItem | None = None
         self._setup_ui()
 
     # ── свойства ──────────────────────────────────────────────
@@ -60,6 +65,10 @@ class FileTreeWidget(QTreeWidget):
                 self.scrollToItem(item)
                 return
 
+    def is_folder_item(self, item: QTreeWidgetItem) -> bool:
+        """Проверить, что элемент — папка."""
+        return item.text(0).startswith("\U0001f4c1")  # 📁
+
     # ── UI ────────────────────────────────────────────────────
 
     def _setup_ui(self) -> None:
@@ -69,7 +78,13 @@ class FileTreeWidget(QTreeWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.setIndentation(16)
 
-        # Ширина колонки по содержимому
+        # Drag-and-drop
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QTreeWidget.DragDropMode.InternalMove)
+
+        # Ширина колонки
         header = self.header()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -83,31 +98,124 @@ class FileTreeWidget(QTreeWidget):
     def _populate(self, data: list[dict], parent: QTreeWidgetItem) -> None:
         for entry in data:
             if entry["type"] == "folder":
-                item = QTreeWidgetItem(parent, [f"📁 {entry['name']}"])
+                item = QTreeWidgetItem(parent, [f"\U0001f4c1 {entry['name']}"])
                 item.setData(0, Qt.UserRole, entry.get("path", ""))
                 item.setExpanded(True)
                 self._populate(entry["children"], item)
             else:
-                item = QTreeWidgetItem(parent, [f"📝 {entry['name']}"])
+                name = entry["name"]
+                icon = "\U0001f4dd" if name.endswith(".md") else "\U0001f4ca"  # 📝 or 📊
+                item = QTreeWidgetItem(parent, [f"{icon} {name}"])
                 item.setData(0, Qt.UserRole, entry["path"])
+
+    # ── Drag ──────────────────────────────────────────────────
+
+    def startDrag(self, supportedActions) -> None:
+        """Начать перетаскивание элемента."""
+        item = self.currentItem()
+        if not item:
+            return
+
+        rel_path = item.data(0, Qt.UserRole)
+        if not rel_path and not self.is_folder_item(item):
+            return
+
+        self._drag_item = item
+
+        mime_data = QMimeData()
+        mime_data.setData(self.MIME_TYPE, rel_path.encode("utf-8") if rel_path else b"")
+
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.exec(Qt.MoveAction)
+
+    # ── Drop ──────────────────────────────────────────────────
+
+    def dropEvent(self, event) -> None:
+        """Обработка перетаскивания файла/папки."""
+        if not self._file_manager:
+            event.ignore()
+            return
+
+        target_item = self.itemAt(event.pos())
+        mime_data = event.mimeData()
+
+        if not mime_data.hasFormat(self.MIME_TYPE):
+            event.ignore()
+            return
+
+        src_path = bytes(mime_data.data(self.MIME_TYPE)).decode("utf-8")
+        if not src_path:
+            event.ignore()
+            return
+
+        # Определяем целевую папку
+        if target_item and self.is_folder_item(target_item):
+            target_folder = target_item.data(0, Qt.UserRole) or ""
+        else:
+            # Бросили не на папку — в корень
+            target_folder = ""
+
+        # Нельзя перетащить папку в саму себя
+        if src_path == target_folder or (target_folder and target_folder.startswith(src_path + "/")):
+            event.ignore()
+            return
+
+        # Формируем новый путь
+        filename = src_path.split("/")[-1]
+        new_path = f"{target_folder}/{filename}" if target_folder else filename
+
+        if new_path == src_path:
+            event.ignore()
+            return
+
+        try:
+            self._file_manager.rename(src_path, new_path)
+            self.file_moved.emit(src_path, new_path)
+            self.refresh()
+            event.accept()
+        except OSError:
+            event.ignore()
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasFormat(self.MIME_TYPE):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasFormat(self.MIME_TYPE):
+            event.acceptProposedAction()
+            # Подсветить целевую папку
+            item = self.itemAt(event.pos())
+            if item and self.is_folder_item(item):
+                self.setCurrentItem(item)
+        else:
+            super().dragMoveEvent(event)
 
     # ── слоты ─────────────────────────────────────────────────
 
     def _on_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
         rel_path = item.data(0, Qt.UserRole)
-        if rel_path and not item.text(0).startswith("📁"):
+        if rel_path and not self.is_folder_item(item):
             self.file_selected.emit(rel_path)
+        elif self.is_folder_item(item):
+            # Раскрыть/свернуть папку при клике
+            if item.isExpanded():
+                self.collapseItem(item)
+            else:
+                self.expandItem(item)
 
     def _on_context_menu(self, pos) -> None:
         item = self.itemAt(pos)
         menu = QMenu(self)
 
-        # Определяем, где создаём — в корне или в папке
         parent_path = ""
-        if item and item.text(0).startswith("📁"):
+        if item and self.is_folder_item(item):
             parent_path = item.data(0, Qt.UserRole) or ""
 
-        new_note = menu.addAction("Новая заметка")
+        new_note = menu.addAction("Новая заметка (.md)")
+        new_mermaid = menu.addAction("Новая схема (.mermaid.md)")
         new_folder = menu.addAction("Новая папка")
         menu.addSeparator()
 
@@ -121,6 +229,8 @@ class FileTreeWidget(QTreeWidget):
 
         if action == new_note:
             self.create_note_requested.emit(parent_path)
+        elif action == new_mermaid:
+            self.create_note_requested.emit(parent_path + "|mermaid")
         elif action == new_folder:
             self.create_folder_requested.emit(parent_path)
         elif action == delete_action and item:
