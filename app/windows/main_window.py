@@ -34,9 +34,6 @@ QMainWindow { background: #ffffff; }
 #sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
                  background-color: #e8e8e8; border-bottom: 1px solid #ccc; color: #000; }
 #topBar { background-color: #f0f0f0; border-bottom: 1px solid #ccc; }
-#noteTitle { color: #000; font-size: 22px; font-weight: bold; border: none;
-             background: transparent; padding: 10px 16px 4px 16px; }
-#noteTitlePlaceholder { color: #aaa; }
 QMenuBar { background: #f5f5f5; color: #000; }
 QMenuBar::item { color: #000; }
 QMenu { background: #f8f8f8; color: #000; }
@@ -47,8 +44,7 @@ QStatusBar { background: #f0f0f0; color: #555; }
 QTreeWidget { background: #fafafa; border: none; color: #000; }
 QTreeWidget::item { color: #000; }
 QTreeWidget::item:selected { background: #4a9eff; color: white; }
-QPlainTextEdit { background-color: #fafafa; border: none; color: #000;
-                 padding: 8px; padding-left: 4px; }
+QPlainTextEdit { background-color: #ffffff; border: none; color: #000; padding: 8px; }
 QTextBrowser { background-color: #ffffff; border: none; color: #000; padding: 8px; }
 QLabel { color: #000; }
 QPushButton { color: #000; }
@@ -65,8 +61,6 @@ QMainWindow { background: #000000; color: #ffffff; }
 #sidebarHeader { padding: 8px; font-weight: bold; font-size: 13px;
                  background-color: #111111; border-bottom: 1px solid #333; color: #ffffff; }
 #topBar { background-color: #111111; border-bottom: 1px solid #333; }
-#noteTitle { color: #ffffff; font-size: 22px; font-weight: bold; border: none;
-             background: transparent; padding: 10px 16px 4px 16px; }
 QMenuBar { background: #000000; color: #ffffff; }
 QMenuBar::item { color: #ffffff; }
 QMenuBar::item:selected { background: #222222; }
@@ -80,8 +74,7 @@ QTreeWidget { background: #000000; border: none; color: #ffffff; }
 QTreeWidget::item { color: #ffffff; padding: 2px; }
 QTreeWidget::item:selected { background: #4a9eff; color: white; }
 QTreeWidget::item:hover { background: #222222; }
-QPlainTextEdit { background-color: #000000; color: #ffffff; border: none;
-                 padding: 8px; padding-left: 4px; }
+QPlainTextEdit { background-color: #000000; color: #ffffff; border: none; padding: 8px; }
 QTextBrowser { background-color: #000000; color: #ffffff; border: none; padding: 8px; }
 QLabel { color: #ffffff; }
 QPushButton { color: #ffffff; }
@@ -146,7 +139,6 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Главный сплиттер
         self._main_splitter = QSplitter(Qt.Horizontal)
 
         # ── Сайдбар ──
@@ -176,15 +168,15 @@ class MainWindow(QMainWindow):
         work_layout.setContentsMargins(0, 0, 0, 0)
         work_layout.setSpacing(0)
 
-        # Панель кнопок вида + чат (компактная, сверху справа)
+        # Компактная верхняя панель: кнопки вида + чат
         top_bar = QWidget()
         top_bar.setObjectName("topBar")
         top_bar_layout = QHBoxLayout(top_bar)
-        top_bar_layout.setContentsMargins(8, 4, 8, 4)
+        top_bar_layout.setContentsMargins(4, 2, 4, 2)
 
-        self._btn_editor = self._make_view_btn("Редактор")
-        self._btn_preview = self._make_view_btn("Предпросмотр")
-        self._btn_split = self._make_view_btn("Разделенный")
+        self._btn_editor = self._make_view_btn("Ред.")
+        self._btn_preview = self._make_view_btn("Просм.")
+        self._btn_split = self._make_view_btn("Сплит")
         self._btn_editor.clicked.connect(lambda: self._set_view_mode("editor"))
         self._btn_preview.clicked.connect(lambda: self._set_view_mode("preview"))
         self._btn_split.clicked.connect(lambda: self._set_view_mode("split"))
@@ -199,14 +191,14 @@ class MainWindow(QMainWindow):
 
         work_layout.addWidget(top_bar)
 
-        # Название заметки (ПОЛНАЯ ШИРИНА, как в Obsidian, над редактором)
+        # Название заметки (полная ширина)
         self._note_title = QLineEdit()
         self._note_title.setObjectName("noteTitle")
         self._note_title.setPlaceholderText("Без названия")
         self._note_title.editingFinished.connect(self._on_title_changed)
         work_layout.addWidget(self._note_title)
 
-        # Рабочий сплиттер (редактор | превью)
+        # Рабочий сплиттер
         self._work_splitter = QSplitter(Qt.Horizontal)
 
         self.editor = EditorWidget()
@@ -220,10 +212,8 @@ class MainWindow(QMainWindow):
 
         work_layout.addWidget(self._work_splitter)
 
-        # Начальный режим
         self._set_view_mode("editor")
 
-        # Главный сплиттер
         self._main_splitter.addWidget(sidebar)
         self._main_splitter.addWidget(work_area)
         self._main_splitter.setStretchFactor(0, 0)
@@ -342,12 +332,14 @@ class MainWindow(QMainWindow):
         self._view_mode = mode
         style_active = (
             "QPushButton { background-color: #4a9eff; color: white; "
-            "border: none; padding: 4px 10px; border-radius: 3px; font-weight: bold; }"
+            "border: none; padding: 1px 5px; border-radius: 2px; "
+            "font-size: 10px; font-weight: bold; min-width: 0; }"
         )
         style_inactive = (
-            "QPushButton { background-color: transparent; color: #555; "
-            "border: none; padding: 4px 10px; border-radius: 3px; }"
-            "QPushButton:hover { background-color: #e0e0e0; }"
+            "QPushButton { background-color: transparent; color: #888; "
+            "border: none; padding: 1px 5px; border-radius: 2px; "
+            "font-size: 10px; min-width: 0; }"
+            "QPushButton:hover { background-color: #ddd; }"
         )
 
         for btn, m in [
@@ -388,9 +380,7 @@ class MainWindow(QMainWindow):
         self._current_path = rel_path
         self.editor.load_content(rel_path, content)
 
-        # Название заметки из имени файла
         filename = rel_path.split("/")[-1]
-        # Убираем .md и .mermaid.md
         if filename.endswith(".mermaid.md"):
             title = filename[:-11]
         elif filename.endswith(".md"):
@@ -431,24 +421,17 @@ class MainWindow(QMainWindow):
         if self._current_path and self.editor.is_modified and self._app.file_manager:
             self._save_current()
 
-    # ── Название заметки (переименование) ────────────────────
-
     def _on_title_changed(self) -> None:
         if not self._current_path or not self._app.file_manager:
             return
-
         new_title = self._note_title.text().strip()
         if not new_title:
             return
-
         parts = self._current_path.rsplit("/", 1)
-        # Определяем расширение текущего файла
         ext = ".mermaid.md" if self._current_path.endswith(".mermaid.md") else ".md"
         new_rel = f"{parts[0]}/{new_title}{ext}" if len(parts) == 2 else f"{new_title}{ext}"
-
         if new_rel == self._current_path:
             return
-
         try:
             self._app.file_manager.rename(self._current_path, new_rel)
             self._current_path = new_rel
@@ -459,14 +442,10 @@ class MainWindow(QMainWindow):
         except OSError as e:
             QMessageBox.warning(self, "Ошибка переименования", str(e))
 
-    # ── Перемещение файлов (drag-and-drop) ──────────────────
-
     def _on_file_moved(self, old_path: str, new_path: str) -> None:
-        """Обработать перемещение файла через drag-and-drop."""
         if self._current_path == old_path:
             self._current_path = new_path
             self.editor.current_path = new_path
-            # Обновить название
             filename = new_path.split("/")[-1]
             if filename.endswith(".mermaid.md"):
                 title = filename[:-11]
@@ -477,26 +456,20 @@ class MainWindow(QMainWindow):
             self._note_title.setText(title)
             self.statusBar().showMessage(f"Перемещен: {old_path} -> {new_path}", 2000)
 
-    # ── Создание / удаление ──────────────────────────────────
-
     def _require_vault(self) -> bool:
         if not self._app.file_manager:
-            QMessageBox.warning(self, "Нет хранилища",
-                                "Сначала откройте хранилище (Ctrl+O)")
+            QMessageBox.warning(self, "Нет хранилища", "Сначала откройте хранилище (Ctrl+O)")
             return False
         return True
 
     def _on_create_note(self, parent_path_and_type: str) -> None:
         if not self._require_vault():
             return
-
-        # Формат: "path" или "path|mermaid"
         is_mermaid = False
         parent_path = parent_path_and_type
         if "|" in parent_path_and_type:
             parent_path, type_hint = parent_path_and_type.rsplit("|", 1)
             is_mermaid = type_hint == "mermaid"
-
         default_name = "Новая схема" if is_mermaid else "Новая заметка"
         name, ok = QInputDialog.getText(
             self, "Новая заметка" if not is_mermaid else "Новая схема",
@@ -504,14 +477,11 @@ class MainWindow(QMainWindow):
         )
         if not ok or not name.strip():
             return
-
         name = name.strip()
         ext = ".mermaid.md" if is_mermaid else ".md"
         rel = f"{parent_path}/{name}{ext}" if parent_path else f"{name}{ext}"
-
         try:
             path = self._app.file_manager.create_note(rel)
-            # Для mermaid — добавить шаблон
             if is_mermaid:
                 template = "```mermaid\ngraph TD\n    A[Начало] --> B[Конец]\n```\n"
                 self._app.file_manager.write_file(rel, template)
@@ -524,11 +494,9 @@ class MainWindow(QMainWindow):
     def _on_create_folder(self, parent_path: str) -> None:
         if not self._require_vault():
             return
-
         name, ok = QInputDialog.getText(self, "Новая папка", "Имя папки:")
         if not ok or not name.strip():
             return
-
         name = name.strip()
         rel = f"{parent_path}/{name}" if parent_path else name
         try:
@@ -540,14 +508,10 @@ class MainWindow(QMainWindow):
     def _on_delete(self, rel_path: str) -> None:
         if not self._require_vault():
             return
-
-        reply = QMessageBox.question(
-            self, "Удалить?", f"Удалить {rel_path}?",
-            QMessageBox.Yes | QMessageBox.No,
-        )
+        reply = QMessageBox.question(self, "Удалить?", f"Удалить {rel_path}?",
+                                     QMessageBox.Yes | QMessageBox.No)
         if reply != QMessageBox.Yes:
             return
-
         try:
             self._app.file_manager.delete(rel_path)
             if self._current_path == rel_path:
@@ -558,14 +522,10 @@ class MainWindow(QMainWindow):
         except OSError as e:
             QMessageBox.warning(self, "Ошибка", f"Не удалось удалить:\n{e}")
 
-    # ── Хранилище ────────────────────────────────────────────
-
     def _on_open_vault(self) -> None:
         dialog = VaultDialog(self)
         if dialog.exec():
             self._app.open_vault(dialog.selected_path)
-
-    # ── Настройки ────────────────────────────────────────────
 
     def _on_settings(self) -> None:
         dialog = SettingsDialog(self)
@@ -582,8 +542,6 @@ class MainWindow(QMainWindow):
             self.setStyleSheet(THEME_DARK)
         else:
             self.setStyleSheet(THEME_LIGHT)
-
-    # ── Закрытие ─────────────────────────────────────────────
 
     def closeEvent(self, event) -> None:
         self._save_current()

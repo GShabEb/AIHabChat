@@ -174,15 +174,7 @@ class EditorWidget(QPlainTextEdit):
         self.setLineWrapMode(QPlainTextEdit.WidgetWidth)
         self.setTabStopDistance(self._tab_size * self.fontMetrics().averageCharWidth())
 
-        # Стиль
-        self.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background-color: #fafafa;"
-            "  border: none;"
-            "  padding: 8px;"
-            "  padding-left: 4px;"
-            "}"
-        )
+        # Стиль управляется через тему в MainWindow
 
         # Сигналы
         self.textChanged.connect(self._on_text_changed)
